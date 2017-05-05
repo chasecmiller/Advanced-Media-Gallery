@@ -23,8 +23,10 @@ class Plugin
     public function __construct()
     {
         add_action('init', [$this, 'commonInit'], PHP_INT_MAX);
-        add_action('add_attachment', [$this, 'commonAddAttachment'], 11, 1);
-        add_action('the_post', [$this, 'commonThePost'], 10, 1);
+// This should actually trigger in cases that an item is added without the admin menu.
+// We need to lock attachments to prevent it when needed.
+//        add_action('add_attachment', [$this, 'commonAddAttachment'], 11, 1);
+//        add_action('the_post', [$this, 'commonThePost'], 10, 1);
         add_filter('wp_get_object_terms', [$this, 'commonWpGetObjectTerms'], 10, 4);
 
 
@@ -49,7 +51,6 @@ class Plugin
                 do_action('wp_login', $loginusername);
                 wp_redirect(admin_url('/', 'https'), 301);
                 exit;
-
             } else if (wp_doing_ajax()) {
                 return;
             } else if (is_admin()) {
@@ -84,7 +85,7 @@ class Plugin
                 'new_item_name' => __('New Person', __NAMESPACE__),
                 'menu_name' => __('Person', __NAMESPACE__),
             ],
-            'hierarchical' => false,
+            'hierarchical' => true,
             'query_var' => 'true',
             'rewrite' => 'true',
             'show_admin_column' => 'true',
@@ -147,13 +148,17 @@ class Plugin
             return $terms;
         }
 
+        // Already set?  Quick bail.
+        if ($terms) {
+            return $terms;
+        }
+
         // Validate method.
         $method = '_generate' . str_replace(' ', '', ucwords(str_replace('_', ' ', $tax)));
 
         if (!method_exists($this, $method)) {
             return $terms;
         }
-
 
         $this->generating = false;
 
@@ -199,7 +204,11 @@ class Plugin
             return false;
         }
 
-        $url = wp_get_attachment_url($post->ID);
+        // Reduce to large image first. Rekognition has a 15mb limit.
+        if (!$url = wp_get_attachment_image_src($post->ID, 'large', false)) {
+            return false;
+        }
+        $url = $url[0];
         $uploads = wp_upload_dir();
         $filename = str_replace($uploads['baseurl'], $uploads['basedir'], $url);
 
@@ -211,6 +220,8 @@ class Plugin
                 'secret' => $this->options['aws_secret'],
             ]
         ]);
+
+
 
         $handle = fopen($filename, "r");
         $contents = fread($handle, filesize($filename));
@@ -260,7 +271,6 @@ class Plugin
      */
     protected function _generatePerson($post = false)
     {
-        return false;
         if (!$this->options['face_enabled']) {
             return false;
         } else if (!$this->options['face_collection']) {
@@ -277,6 +287,7 @@ class Plugin
         if (!$post || !$post instanceof \WP_Post) {
             return false;
         }
+
         if (get_post_type($post) != 'attachment') {
             return false;
         }
@@ -287,6 +298,11 @@ class Plugin
 
             ])
         ) {
+            return false;
+        }
+
+        $s = get_post_meta($post->ID, '_bypass_person', true);
+        if ($s && $s == true) {
             return false;
         }
 
@@ -320,7 +336,11 @@ class Plugin
             return false;
         }
 
-        $url = wp_get_attachment_url($post->ID);
+        // Reduce to large image first. Rekognition has a 15mb limit.
+        if (!$url = wp_get_attachment_image_src($post->ID, 'large', false)) {
+            return false;
+        }
+        $url = $url[0];
         $uploads = wp_upload_dir();
         $filename = str_replace($uploads['baseurl'], $uploads['basedir'], $url);
 
@@ -340,60 +360,34 @@ class Plugin
                 'MaxFaces' => 100
             ]);
 
-            $slugs = array_map(function($e) {
-                return $e['Face']['FaceId'];
-            }, $data->get('FaceRecords'));
-            /*
-            foreach($data->get('FaceRecords') as $face) {
-                $id = $face['Face']['FaceId'];
-                // Term exists?
-                if (!get_term_by('slug', $id, 'person')) {
-                    wp_insert_term($id, 'person', [
-                        'slug' => $id
-                    ]);
-                }
+            $slugs = [];
+            foreach ($data->get('FaceRecords') as $e) {
+                $slugs[$e['Face']['FaceId']] = $e['Face']['BoundingBox'];
             }
-*/
-            $data = $client->searchFacesByImage([
-                'CollectionId' => $this->options['face_collection'],
-                'FaceMatchThreshold' => 75,
-                'Image' => [ // REQUIRED
-                    'Bytes' => $contents,
-                ],
-                'MaxFaces' => 100
-            ]);
-            $terms = array_map(function($e) {
-                return $e['Face']['FaceId'];
-            }, $data->get('FaceMatches'));
-            echo '<pre>';
-            print_r($slugs);
-            print_r($terms);
-            exit;
-            foreach($data->get('FaceMatches') as $face) {
-                // How to add a bounding box easily?
-                $id = $face['Face']['FaceId'];
-                if (!get_term_by('slug', $id, 'person')) {
-                    wp_insert_term($id, 'person', [
-                        'slug' => $id
-                    ]);
-                }
-//                $terms[] =
-            }
-            echo '<pre>';
-            print_r($data);
-echo '</pre>';
-            exit;
 
+            if (!$slugs) {
+                add_post_meta($post->ID, '_bypass_person', true, true);
+                return [];
+            }
+
+            foreach ($slugs as $k => $v) {
+                // How to add a bounding box easily?
+                if (!get_term_by('slug', $k, 'person')) {
+                    wp_insert_term($k, 'person', [
+                        'slug' => $k
+                    ]);
+                }
+                add_post_meta($post->ID, $k, $v, true) || update_post_meta($post->ID, $k, $v, true);
+            }
+            wp_set_object_terms($post->ID, array_keys($slugs), 'person', false);
+            $ret = get_terms('person', [
+                'hide_empty' => false,
+                'include' => array_keys($slugs)
+            ]);
+            return $ret;
         } catch (Exception $e) {
         }
-
-        exit;
-        wp_set_object_terms($post->ID, array_column($data, 'slug'), 'post_tag', false);
-        $ret = get_terms('post_tag', [
-            'hide_empty' => false,
-            'include' => array_column($data, 'term_id')
-        ]);
-        return $ret;
+        return false;
     }
 }
 

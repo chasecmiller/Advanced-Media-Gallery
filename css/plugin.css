@@ -1,0 +1,93 @@
+#amg .inside > .button {
+    width: 50%;
+    text-align: center;
+}
+
+#amg .inside .toggle-menu > a {
+    display: none;
+}
+
+#amg .inside .toggle-menu.closed > a {
+    display: block;
+}
+
+#amg .inside .toggle-menu > ul {
+    display: block;
+}
+
+#amg .inside .toggle-menu.closed > ul {
+    display: none;
+}
+
+#amg .tag-list li {
+    display: inline-block;
+    margin-right: 0.9357em;
+}
+
+/** OLD START **/
+
+
+.wp_attachment_image > * {
+    position: relative;
+}
+.jcrop-tracker {
+    z-index: 995;
+}
+.jcrop-tracker {
+    background: transparent !important;
+}
+.wp_attachment_holder > div.jcrop-holder > div:nth-child(1) {
+    border: 1px dashed #000000;
+}
+.wp_attachment_image > * > .face {
+    border: 5px solid rgba(33,33,33,0.15);
+    z-index: 999;
+}
+.wp_attachment_image > * > .face:hover {
+    /*
+    border: 5px solid rgba(33,33,33,0.5);
+    background-color: rgba(33,33,33,0.25);
+    */
+}
+
+.face:hover .tooltip, .face.selected .tooltip {
+    display: block;
+}
+
+.face .tooltip {
+    display: inline-block;
+    text-decoration: none;
+    line-height: 1.2em;
+    margin: 0;
+    padding: 0.46785em;
+    cursor: pointer;
+    border-width: 1px;
+    border-style: solid;
+    -webkit-appearance: none;
+    -webkit-border-radius: 3px;
+    border-radius: 3px;
+    white-space: nowrap;
+    -webkit-box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    box-sizing: border-box;
+    color: #555;
+    border-color: #ccc;
+    background: #f7f7f7;
+    -webkit-box-shadow: 0 1px 0 #ccc;
+    box-shadow: 0 1px 0 #ccc;
+    vertical-align: top;
+    display: none;
+    background: #fafafa;
+    border-color: #999;
+    color: #23282d;
+    z-index:100000;
+    position: absolute;
+    left: 100%;
+    min-width: 100px;
+    width: auto;
+    padding: 0.9357em
+}
+.ui-autocomplete {
+    z-index:100060;
+
+}
